@@ -1,6 +1,7 @@
 package io.evolutionary.twin
 
 import com.typesafe.config.{ConfigFactory, Config}
+import org.http4s.client.Client
 import org.http4s.{Uri, Response, Request}
 import org.http4s.dsl._
 
@@ -13,25 +14,25 @@ class RouterSettings(config: Config) {
   val mirroredConfigs = routerCfg.getConfigList("mirrored").asScala
   val mirroredSites = for {
     cfg <- mirroredConfigs
-    siteName = cfg.getString("site")
+    siteName = cfg.getString("name")
     urls = cfg.getStringList("urls").asScala.map(url => Uri.fromString(url).fold((err) => throw new RuntimeException(s"Invalid URL: $url. Error: $err"), identity))
   } yield Site(siteName, urls)
 }
 
 object Router {
-  def make: Router = new Router(new RouterSettings(ConfigFactory.load()))
+  def make(implicit client: Client): Router = new Router(new RouterSettings(ConfigFactory.load()))
 }
 
-class Router(settings: RouterSettings) extends PartialFunction[Request, Task[Response]] {
-  override def isDefinedAt(x: Request): Boolean = x match {
+class Router(settings: RouterSettings)(implicit client: Client) extends PartialFunction[Request, Task[Response]] {
+  override def isDefinedAt(req: Request): Boolean = req match {
     case GET -> Root / (site: String) =>
-      val targetSite = settings.mirroredSites.find(_.name == site)
-      targetSite.isDefined
+      settings.mirroredSites.exists(_.name == site)
+    case _ => false
   }
-  override def apply(v1: Request): Task[Response] = v1 match {
+  override def apply(req: Request): Task[Response] = req match {
     case GET -> Root / (site: String) =>
       val targetSite = settings.mirroredSites.find(_.name == site)
-      val url = v1.params.get("url")
+      val url = req.params.get("url")
       val task = for {
         site <- targetSite
         urlRaw <- url

@@ -5,6 +5,7 @@
 .cache
 .history
 .lib/
+.idea/
 dist/*
 target/
 project/target

@@ -4,6 +4,8 @@ version := "1.0"
 
 scalaVersion := "2.11.6"
 
+fork in run := true
+
 resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
 resolvers += Resolver.sonatypeRepo("snapshots")
 
@@ -15,3 +17,4 @@ libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.1.3"
 libraryDependencies += "org.scalaz" %% "scalaz-concurrent" % "7.1.3"
 
 libraryDependencies += "com.typesafe" % "config" % "1.3.0"
+libraryDependencies += "io.dropwizard.metrics" % "metrics-json" % "3.1.2"

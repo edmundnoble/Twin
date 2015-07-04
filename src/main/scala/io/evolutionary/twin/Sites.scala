@@ -9,16 +9,14 @@ import org.http4s._
 
 import scala.io.Codec
 import scalaz.concurrent.Task
-import scalaz._
 import scalaz.stream._
-import Scalaz._
 
 case class Site(name: String, urls: Seq[Uri])
 
 object Sites {
   val validFilenameCharacters = ('0' to '9') ++ ('A' to 'Z')
 
-  def getRoute(site: Site, url: Uri): Process[Task, String] = {
+  def getRoute(site: Site, url: Uri)(implicit client: Client): Process[Task, String] = {
     val cachedAlready = isCached(site, url)
     if (cachedAlready) {
       retrieveFile(site, url)
@@ -27,9 +25,11 @@ object Sites {
     }
   }
 
+  implicit val fileCodec = Codec.UTF8
+
   def retrieveFile(site: Site, url: Uri): Process[Task, String] = {
     val fileName = routeToFileName(site, url)
-    io.linesR(fileName)(Codec.UTF8)
+    io linesR fileName
   }
 
   def isCached(site: Site, url: Uri): Boolean = {

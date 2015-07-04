@@ -1,29 +1,59 @@
 package io.evolutionary.twin
 
+import java.util.concurrent.TimeUnit
+
+import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.json.MetricsModule
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.typesafe.config.{ConfigFactory, Config}
 import org.http4s.server.blaze.BlazeBuilder
+import org.http4s.server.blaze.BlazeBuilder
+import org.http4s.server.middleware.Metrics
+import org.http4s.dsl._
+import com.codahale.metrics._
 
 import scalaz.concurrent.{Task, TaskApp}
+import scalaz.stream.io
 import org.http4s.dsl._
 import org.http4s.server._
+import scala.collection.JavaConverters._
 
 object Main extends App {
   class ServerSettings(config: Config) {
-    config.checkValid(ConfigFactory.defaultReference())
-    config.getConfig("io.evolutionary.twin.server")
+    val serverCfg = config.getConfig("io.evolutionary.twin.server")
 
-    val port = config.getInt("port")
-    val host = config.getString("host")
-    val route = config.getString("route")
+    val port = serverCfg.getInt("port")
+    val host = serverCfg.getString("host")
+    val route = serverCfg.getString("route")
   }
-  val httpService = HttpService(Router.make)
 
   val settings = new ServerSettings(ConfigFactory.load())
 
-  BlazeBuilder
+  implicit val client = org.http4s.client.blaze.defaultClient
+
+  val metrics = new MetricRegistry()
+  val mapper = new ObjectMapper()
+    .registerModule(new MetricsModule(TimeUnit.SECONDS, TimeUnit.SECONDS, true))
+
+  val httpService = HttpService(Router.make)
+  val metricsService = HttpService {
+    case GET -> Root / "metrics" =>
+      val writer = mapper.writerWithDefaultPrettyPrinter()
+      Ok(writer.writeValueAsString(metrics))
+  }
+
+  val svc = Metrics.meter(metrics, "Twin")(httpService orElse metricsService)
+
+  val server = BlazeBuilder
     .bindHttp(settings.port, settings.host)
-    .mountService(httpService, settings.route)
+    .mountService(svc, settings.route)
+    .withNio2(true)
     .run
-    .awaitShutdown()
+
+  println("Server started!")
+
+  io.stdInLines.map(Command.parseCommand).to(io.stdOutLines)
+
+  server.awaitShutdown()
 
 }

@@ -5,7 +5,6 @@
 .cache
 .history
 .lib/
-.idea/
 dist/*
 target/
 project/target
@@ -14,6 +13,12 @@ src_managed/
 project/boot/
 project/plugins/project/
 
+# IntelliJ specific
+.idea/
+
 # Scala-IDE specific
 .scala_dependencies
 .worksheet
+
+# Twin specific
+sites/

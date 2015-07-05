@@ -13,10 +13,11 @@ import org.http4s.dsl._
 import com.codahale.metrics._
 
 import scalaz.concurrent.{Task, TaskApp}
-import scalaz.stream.io
+import scalaz.stream._
 import org.http4s.dsl._
 import org.http4s.server._
 import scala.collection.JavaConverters._
+import language.postfixOps
 
 object Main extends App {
   class ServerSettings(config: Config) {
@@ -52,8 +53,6 @@ object Main extends App {
 
   println("Server started!")
 
-  io.stdInLines.map(Command.parseCommand).to(io.stdOutLines)
-
-  server.awaitShutdown()
+  ((io stdInLines) map Command.parseCommand to (io stdOutLines)).onComplete(Process.eval(Task { server.awaitShutdown() })).run.run
 
 }

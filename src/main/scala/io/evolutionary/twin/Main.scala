@@ -53,6 +53,8 @@ object Main extends App {
 
   println("Server started!")
 
-  ((io stdInLines) map Command.parseCommand to (io stdOutLines)).onComplete(Process.eval(Task { server.awaitShutdown() })).run.run
+  val commandParsing = (io stdInLines) map Command.parseCommand to (io stdOutLines)
+
+  commandParsing.run.run
 
 }

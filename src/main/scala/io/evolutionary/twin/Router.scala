@@ -10,6 +10,7 @@ import scalaz._
 import effectful._
 
 import scalaz.concurrent.Task
+import scalaz.stream._
 
 import scala.collection.JavaConverters._
 
@@ -19,10 +20,7 @@ class RouterSettings(config: Config) {
 
   val routerCfg = config.getConfig("io.evolutionary.twin.router")
   val mirroredConfigs = routerCfg.getConfigList("mirrored").asScala
-  val mirroredSites = mirroredConfigs map { cfg =>
-    val urls = cfg.getStringList("urls").asScala.map(url => Uri.fromString(url).fold((err) => throw new RuntimeException(s"Invalid URL: $url. Error: $err"), identity))
-    Site(cfg.getString("name"), urls)
-  }
+  val mirroredSites = mirroredConfigs map { _.getString("name") }
 }
 
 object Router {
@@ -32,20 +30,20 @@ object Router {
 class Router(settings: RouterSettings)(implicit client: Client) extends PartialFunction[Request, Task[Response]] {
 
   import Scalaz._
+  import Sites._
 
   override def isDefinedAt(req: Request): Boolean = req match {
-    case GET -> Root / (site: String) =>
-      settings.mirroredSites.exists(_.name == site)
+    case GET -> Root / (site: Site) =>
+      settings.mirroredSites.contains(site)
     case _ => false
   }
 
   override def apply(req: Request): Task[Response] = req match {
-    case GET -> Root / (site: String) =>
-      val targetSite = settings.mirroredSites.find(_.name == site)
+    case GET -> Root / (site: Site) =>
       val url = req.params.get("url")
       println(req.params)
       val task: Option[Process[Task, String]] = effectfully {
-        Sites.getRoute(targetSite !, Uri.fromString(url !).toOption !)
+        getRoute(site, Uri.fromString(url !).toOption !)
       }
       task.fold(NotFound())(Ok(_))
   }

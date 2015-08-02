@@ -17,11 +17,9 @@ object Command extends JavaTokenParsers {
   case class ParseException(reason: String) extends RuntimeException(reason)
 
   implicit class ProcessFromParseResult(val p: Process.type) {
-    def fromParseResult[T](p: ParseResult[Process[Task, T]]): Process[Task, T] = p match {
+    def fromParseResult(p: ParseResult[Process[Task, String]]): Process[Task, String] = p match {
       case Success(s, _) => s
-      case Failure(msg, next) => Process.eval_(Task.delay {
-        println("Command failed to parse!")
-      })
+      case Failure(msg, next) => Process.fromValue[Task, String]("Command failed to parse!")
       case Error(msg, next) => Process.eval(Task.fail(ParseException(msg)))
     }
   }
@@ -31,12 +29,13 @@ object Command extends JavaTokenParsers {
 
   type Cmd = (Client, Router) => Process[Task, String]
 
-  def caseInsensitive(s: String): Parser[String] = ("(?i)" + s).r
+  def uncased(s: String): Parser[String] = ("(?i)" + s).r
   def ignore(client: Client, router: Router): Process[Task, String] = Process.empty
+  def exitCommand(client: Client, router: Router): Process[Task, String] = Process.eval_(Task.delay { System.exit(0) })
 
   def deleteAllCommand(client: Client, router: Router): Process[Task, String] = {
     val siteDeletes: List[Process[Task, String]] = router.allSites.map(site => Paths.get(Sites.siteToFileName(site))).map { file =>
-      Process.eval(Task.delay(s"Deleting file... ${file.toString}")) ++ Process.eval(Task.delay(Files.delete(file))).map(_ => "")
+      Process.eval(Task.delay(s"Deleting file... ${file.toString}")) ++ Process.eval(Task.delay(FileUtils.deleteFolder(file))).map(_ => "")
     }
     if (siteDeletes.isEmpty) Process.eval(Task.delay("No sites to delete!"))
     else siteDeletes.reduce(_ ++ _)
@@ -51,10 +50,11 @@ object Command extends JavaTokenParsers {
         r = uriParsed => Sites.forceFetchRoute(site, uriParsed))
   }
 
-  def deleteAll: Parser[Cmd] = caseInsensitive("deleteall") ^^ (_ => deleteAllCommand _)
+  def deleteAll: Parser[Cmd] = uncased("deleteall") ^^ (_ => deleteAllCommand)
   def fetch: Parser[Cmd] = ("fetch" ~> whiteSpace ~> siteRegex) ~ url ^^ fetchCommand
-  def blank: Parser[Cmd] = whiteSpace.? ^^ (_ => ignore)
-  def command: Parser[Cmd] = deleteAll | fetch | blank
+  def exit: Parser[Cmd] = (uncased("quit") | uncased("exit") | uncased("q")) ^^ (_ => exitCommand)
+  def blank: Parser[Cmd] = whiteSpace.* ^^ (_ => ignore)
+  def command: Parser[Cmd] = deleteAll | fetch | exit | blank
 
   def parseCommand(cmd: String, router: Router)(implicit client: Client): Process[Task, String] = {
     Process.fromParseResult(parseAll(command, cmd).map(_(client, router)))

@@ -14,23 +14,24 @@ import scalaz.stream._
 
 import scala.collection.JavaConverters._
 
+import net.ceedubs.ficus.Ficus._
+
 class RouterSettings(config: Config) {
-
-  import Scalaz._
-
   val routerCfg = config.getConfig("io.evolutionary.twin.router")
-  val mirroredConfigs = routerCfg.getConfigList("mirrored").asScala
+  val mirroredConfigs = routerCfg.as[List[Config]]("mirrored")
   val mirroredSites = mirroredConfigs map { _.getString("name") }
 }
 
 object Router {
-  def make(implicit client: Client): Router = new Router(new RouterSettings(ConfigFactory.load()))
+  def make(settings: RouterSettings)(implicit client: Client): Router = new Router(settings)
 }
 
 class Router(settings: RouterSettings)(implicit client: Client) extends PartialFunction[Request, Task[Response]] {
 
   import Scalaz._
   import Sites._
+
+  def allSites = settings.mirroredSites
 
   override def isDefinedAt(req: Request): Boolean = req match {
     case GET -> Root / (site: Site) =>
@@ -43,7 +44,8 @@ class Router(settings: RouterSettings)(implicit client: Client) extends PartialF
       val url = req.params.get("url")
       println(req.params)
       val task: Option[Process[Task, String]] = effectfully {
-        getRoute(site, Uri.fromString(url !).toOption !)
+        Sites.fetchRoute(
+          site, Uri.fromString(url !).toOption !)
       }
       task.fold(NotFound())(Ok(_))
   }

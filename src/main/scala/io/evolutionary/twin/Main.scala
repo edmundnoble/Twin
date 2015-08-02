@@ -19,14 +19,17 @@ import org.http4s.server._
 import scala.collection.JavaConverters._
 import language.postfixOps
 
-object Main extends App {
-  class ServerSettings(config: Config) {
-    val serverCfg = config.getConfig("io.evolutionary.twin.server")
+import net.ceedubs.ficus.Ficus._
 
-    val port = serverCfg.getInt("port")
-    val host = serverCfg.getString("host")
-    val route = serverCfg.getString("route")
-  }
+class ServerSettings(config: Config) {
+  val serverCfg = config.getConfig("io.evolutionary.twin.server")
+
+  val port = serverCfg.as[Int]("port")
+  val host = serverCfg.as[String]("host")
+  val route = serverCfg.as[String]("route")
+}
+
+object Main extends App {
 
   val settings = new ServerSettings(ConfigFactory.load())
 
@@ -36,7 +39,10 @@ object Main extends App {
   val mapper = new ObjectMapper()
     .registerModule(new MetricsModule(TimeUnit.SECONDS, TimeUnit.SECONDS, true))
 
-  val httpService = HttpService(Router.make)
+  val routerSettings = new RouterSettings(ConfigFactory.load())
+  val router = Router.make(routerSettings)
+
+  val httpService = HttpService(router)
   val metricsService = HttpService {
     case GET -> Root / "metrics" =>
       val writer = mapper.writerWithDefaultPrettyPrinter()
@@ -53,7 +59,7 @@ object Main extends App {
 
   println("Server started!")
 
-  val commandParsing = (io stdInLines) map Command.parseCommand to (io stdOutLines)
+  val commandParsing = (io stdInLines) flatMap { cmd => Command.parseCommand(cmd, router) } to (io stdOutLines)
 
   commandParsing.run.run
 

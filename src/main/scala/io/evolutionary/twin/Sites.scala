@@ -19,21 +19,26 @@ import effectful._
 object Sites {
   type Site = String
 
-  val siteFolder = "sites"
+  val allSiteFolder = "sites"
   val validFilenameCharacters = ('0' to '9') ++ ('A' to 'Z')
   val fileBufferSize = 4096
+  
 
-  def getRoute(site: Site, url: Uri)(implicit client: Client): Process[Task, String] = {
+  def fetchRoute(site: Site, url: Uri)(implicit client: Client): Process[Task, String] = {
     val fileName = routeToFileName(site, url)
     val cachedAlready = isCached(fileName)
     if (cachedAlready) {
       retrieveFile(fileName)
     } else {
-      fetchAndSaveFile(site, fileName, url)
+      fetchAndSaveToFile(site, fileName, url)
     }
   }
 
-  def fetchAndSaveFile(site: Site, fileName: String, url: Uri)(implicit client: Client): Process[Task, String] = {
+  def forceFetchRoute(site: Site, url: Uri)(implicit client: Client): Process[Task, String] = {
+    fetchAndSaveToFile(site, routeToFileName(site, url), url)
+  }
+
+  def fetchAndSaveToFile(site: Site, fileName: String, url: Uri)(implicit client: Client): Process[Task, String] = {
     fetchSite(url)
       .pipe(utf8Encode)
       .observe(saveFile(site, fileName))
@@ -57,14 +62,14 @@ object Sites {
           val filePath = Paths.get(fileName)
           val site = siteName.toUpperCase
           def ct(f: => Unit) = catching(classOf[FileAlreadyExistsException]).withTry(f)
-          ct(Files.createDirectory(Paths.get(siteFolder)))
-          ct(Files.createDirectory(Paths.get(siteFolder, site)))
+          ct(Files.createDirectory(Paths.get(allSiteFolder)))
+          ct(Files.createDirectory(Paths.get(allSiteFolder, site)))
           ct(Files.createFile(filePath))
           println("Making outputstream!")
           Files.newOutputStream(filePath)
         } catch {
           case ex: Throwable =>
-            ex.printStackTrace
+            ex.printStackTrace()
             sys.exit(1)
         }
       }
@@ -77,16 +82,17 @@ object Sites {
     Files.exists(Paths.get(fileName))
   }
 
+  def escapeFileName(name: String): String = name.toUpperCase.filter(validFilenameCharacters.contains)
+
   def routeToFileName(site: Site, url: Uri): String = {
-    def escapeFileName(name: String): String = name.toUpperCase.filter(validFilenameCharacters.contains)
     val sep = File.separator
-    val escapedInnerFile = Vector(site, url.toString).map(escapeFileName).mkString(sep)
-    val fileName = siteFolder + sep + escapedInnerFile
-    println(s"File: $fileName")
+    val fileName = siteToFileName(site) + sep + escapeFileName(url.toString)
     fileName
   }
 
-  def fetchSite(url: Uri)(implicit client: Client): Process[Task, String] = {
+  def siteToFileName(site: Site): String = allSiteFolder + File.separator + escapeFileName(site)
+
+  private def fetchSite(url: Uri)(implicit client: Client): Process[Task, String] = {
     Process.eval(client(url).as[String])
   }
 }

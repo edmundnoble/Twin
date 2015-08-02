@@ -6,12 +6,15 @@ import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.json.MetricsModule
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.typesafe.config.{ConfigFactory, Config}
+import org.apache.log4j.BasicConfigurator
 import org.http4s.server.blaze.BlazeBuilder
 import org.http4s.server.blaze.BlazeBuilder
 import org.http4s.server.middleware.Metrics
 import org.http4s.dsl._
 import com.codahale.metrics._
 
+import scalaz._
+import Scalaz._
 import scalaz.concurrent.{Task, TaskApp}
 import scalaz.stream._
 import org.http4s.dsl._
@@ -30,6 +33,8 @@ class ServerSettings(config: Config) {
 }
 
 object Main extends App {
+
+  BasicConfigurator.configure()
 
   val settings = new ServerSettings(ConfigFactory.load())
 
@@ -59,7 +64,7 @@ object Main extends App {
 
   println("Server started!")
 
-  val commandParsing = (io stdInLines) flatMap { cmd => Command.parseCommand(cmd, router) } to (io stdOutLines)
+  val commandParsing = (io stdInLines) flatMap { cmd => Command.parseCommand(cmd, router) }
 
   commandParsing.run.run
 

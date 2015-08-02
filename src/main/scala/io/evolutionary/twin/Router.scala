@@ -26,7 +26,7 @@ object Router {
   def make(settings: RouterSettings)(implicit client: Client): Router = new Router(settings)
 }
 
-class Router(settings: RouterSettings)(implicit client: Client) extends PartialFunction[Request, Task[Response]] {
+class Router(val settings: RouterSettings)(implicit client: Client) extends PartialFunction[Request, Task[Response]] {
 
   import Scalaz._
   import Sites._

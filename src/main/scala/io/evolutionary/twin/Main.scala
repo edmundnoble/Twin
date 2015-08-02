@@ -64,7 +64,7 @@ object Main extends App {
 
   println("Server started!")
 
-  val commandParsing = (io stdInLines) flatMap { cmd => Command.parseCommand(cmd, router) }
+  val commandParsing = (io stdInLines) evalMap { cmd => Command.parseCommand(cmd, router) }
 
   commandParsing.run.run
 

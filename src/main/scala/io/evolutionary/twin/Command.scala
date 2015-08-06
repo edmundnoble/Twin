@@ -146,8 +146,10 @@ object Command extends JavaTokenParsers with TwinLogging {
   }
 
   def commandExceptionHandler: PartialFunction[Throwable, Task[Unit]] = {
-    case ex: Throwable =>
-     Task.delay { logger.error(ex)("an uncaught error has occurred: ") } 
+    case ex: Exception =>
+      Task.delay { logger.error(ex)("an uncaught error has occurred: ") } 
+    case t: Throwable =>
+      Task.delay { logger.error(t)("A serious error has occurred. The program will exit"); sys.exit(1) }
   }
 
   def deleteAll: Parser[Cmd] = uncased("deleteall") ^^ (_ => deleteAllCommand)

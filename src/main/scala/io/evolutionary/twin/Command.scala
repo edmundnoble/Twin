@@ -88,7 +88,7 @@ object Command extends JavaTokenParsers with TwinLogging {
       val uriParseResult = Uri.fromString(url)
       uriParseResult.fold(
         l = _ => Task.fail(new ParseException("Invalid URI")),
-        r = uriParsed => Sites.forceFetchRoute(site, uriParsed).run)
+        r = uriParsed => Sites.forceFetchRoute(site, uriParsed, Map()).run)
   }
 
   def listCommand(client: Client, router: Router): Task[Unit] = {
@@ -120,25 +120,46 @@ object Command extends JavaTokenParsers with TwinLogging {
     if (sites contains site) {
       Task.delay(logger.error(s"Site $site already exists!"))
     } else {
-      Task.fail(???) // TODO
+      Task.delay(???)
     }
   }
 
-  def usageMessage = "" // TODO
+  def usageMessage = """Usage: 
+      |("f" | "fetch") siteName url -> 
+      |     fetches url, saving it under site siteName
+      |("c" | "create") siteName ->
+      |     creates a new site with name siteName
+      |("quit" | "exit" | "q") ->
+      |     quits Twin
+      |"delete" siteName ->
+      |     deletes the site named siteName
+      | "deleteAll" ->
+      |     deletes all sites
+      |"list" | "ls" | "l" ->
+      |     lists the sites you have, as well as the urls under them (the site directory structure)
+      |"help" | "usage" | "?" ->
+      |      shows this message
+      """.stripMargin 
 
   def usageCommand(client: Client, router: Router): Task[Unit] = {
     Task.delay(println(usageMessage))
   }
 
+  def commandExceptionHandler: PartialFunction[Throwable, Task[Unit]] = {
+    case ex: Throwable =>
+     Task.delay { logger.error(ex)("an uncaught error has occurred: ") } 
+  }
+
   def deleteAll: Parser[Cmd] = uncased("deleteall") ^^ (_ => deleteAllCommand)
   def delete: Parser[Cmd] = uncased("delete") ~> siteRegex ^^ deleteCommand
   def fetch: Parser[Cmd] = (uncased("fetch") ~> siteRegex) ~ url ^^ fetchCommand
-  def create: Parser[Cmd] = uncased("create") ~> siteRegex ^^ createCommand
+  def create: Parser[Cmd] = (uncased("create") | uncased("c")) ~> siteRegex ^^ createCommand
   def exit: Parser[Cmd] = (uncased("quit") | uncased("exit") | uncased("q")) ^^ (_ => exitCommand)
   def list: Parser[Cmd] = (uncased("list") | uncased("ls") | uncased("l")) ^^ (_ => listCommand)
-  def usage: Parser[Cmd] = (uncased("help") | uncased("usage") | uncased("?")) ^^ (_ => usageCommand)
+  def usage: Parser[Cmd] = (uncased("help") | uncased("usage") | uncased("\\?")) ^^ (_ => usageCommand)
+
   def wsp: Parser[Cmd] = "\\s".r.* ^^ (_ => ignore)
-  def command: Parser[Cmd] = deleteAll | delete | fetch | exit | list | usage | wsp
+  def command: Parser[Cmd] = deleteAll | delete | fetch | exit | list | usage | create | wsp
 
   def parseCommand(cmd: String, router: Router)(implicit client: Client): Task[Unit] = {
     val correctCmd = handleBackspaces(cmd)
@@ -147,7 +168,7 @@ object Command extends JavaTokenParsers with TwinLogging {
       logger.debug(s"command entered: $correctCmd\nparse result: $parseResult")
       println()
     } >>
-      Task.fromParseResult(parseResult.map(_(client, router)))
+      Task.fromParseResult(parseResult.map(_(client, router))).handleWith(commandExceptionHandler)
   }
 
 }

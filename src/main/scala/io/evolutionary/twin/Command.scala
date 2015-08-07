@@ -3,7 +3,7 @@ package io.evolutionary.twin
 import java.io.{IOException, File}
 import java.nio.file.{Paths, Files}
 
-import org.http4s.Uri
+import org.http4s.{Request, Uri}
 import org.http4s.client.Client
 
 import scala.util.parsing.combinator.JavaTokenParsers
@@ -91,7 +91,7 @@ object Command extends JavaTokenParsers with TwinLogging {
       val uriParseResult = Uri.fromString(url)
       uriParseResult.fold(
         l = _ => Task.fail(new ParseException("Invalid URI")),
-        r = uriParsed => Sites.forceFetchRoute(site, uriParsed, Map()).run)
+        r = uriParsed => Sites.forceFetchRoute(site, uriParsed, Request()).run)
   }
 
   def listCommand(client: Client, router: Router): Task[Unit] = {

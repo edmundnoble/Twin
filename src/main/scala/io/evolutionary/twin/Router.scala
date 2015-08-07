@@ -35,27 +35,22 @@ class Router(val settings: RouterSettings)(implicit client: Client) extends Part
   def allSites = settings.mirroredSites
 
   override def isDefinedAt(req: Request): Boolean = req match {
-    case GET -> Root / (site: Site) =>
+    case _ -> Root / (site: Site) =>
       settings.mirroredSites.contains(site)
     case _ => false
   }
 
-  def filterTwinThings(req: Request): Request = {
-    req.copy(params = req.params.filterKeys(!_.startsWith("__twin")))
-  }
-
   override def apply(req: Request): Task[Response] = req match {
-    case GET -> Root / (site: Site) =>
+    case _ -> Root / (site: Site) =>
       val url = req.params.get("url")
       val refresh = req.params.get("__twin_refresh") == Some("true")
-      println(req.params)
       if (refresh) println("Refreshing!")
       val task: Option[Process[Task, String]] = if (refresh) effectfully {
         Sites.forceFetchRoute(
-          site, Uri.fromString(url !).toOption !, req.params)
+          site, Uri.fromString(url !).toOption !, req)
       } else effectfully {
         Sites.fetchRoute(
-          site, Uri.fromString(url !).toOption !, req.params)
+          site, Uri.fromString(url !).toOption !, req)
       }
       task.fold(NotFound())(Ok(_))
   }

@@ -22,24 +22,24 @@ object Sites {
   val allSiteFolder = "sites"
   val validFilenameCharacters = ('0' to '9') ++ ('A' to 'Z')
   val fileBufferSize = 4096
-  
 
-  def fetchRoute(site: Site, url: Uri, params: Map[String, String])(implicit client: Client): Process[Task, String] = {
+
+  def fetchRoute(site: Site, url: Uri, req: Request)(implicit client: Client): Process[Task, String] = {
     val fileName = routeToFileName(site, url)
     val cachedAlready = isCached(fileName)
     if (cachedAlready) {
-      retrieveFile(fileName, params)
+      retrieveFile(fileName)
     } else {
-      fetchAndSaveToFile(site, fileName, url, params)
+      fetchAndSaveToFile(site, fileName, url, req)
     }
   }
 
-  def forceFetchRoute(site: Site, url: Uri, params: Map[String, String])(implicit client: Client): Process[Task, String] = {
-    fetchAndSaveToFile(site, routeToFileName(site, url), url, params)
+  def forceFetchRoute(site: Site, url: Uri, req: Request)(implicit client: Client): Process[Task, String] = {
+    fetchAndSaveToFile(site, routeToFileName(site, url), url, req)
   }
 
-  def fetchAndSaveToFile(site: Site, fileName: String, url: Uri, params: Map[String, String])(implicit client: Client): Process[Task, String] = {
-    getSite(url, params)
+  def fetchAndSaveToFile(site: Site, fileName: String, url: Uri, req: Request)(implicit client: Client): Process[Task, String] = {
+    getSite(url, req)
       .pipe(utf8Encode)
       .observe(saveFile(site, fileName))
       .pipe(utf8Decode)
@@ -47,7 +47,7 @@ object Sites {
 
   implicit val fileCodec = Codec.UTF8
 
-  def retrieveFile(fileName: String, params: Map[String, String]): Process[Task, String] = {
+  def retrieveFile(fileName: String): Process[Task, String] = {
     Process.constant(100)
       .toSource
       .through(io fileChunkR(fileName, fileBufferSize))
@@ -82,6 +82,12 @@ object Sites {
     Files.exists(Paths.get(fileName))
   }
 
+  def translateRequest(url: Uri, req: Request): Request = {
+    val sanitizedParams = req.params.filterKeys(!_.startsWith("__twin"))
+    val method = req.method
+    Request(method, url, req.httpVersion, req.headers, req.body, req.attributes)
+  }
+
   def escapeFileName(name: String): String = name.toUpperCase.filter(validFilenameCharacters.contains)
 
   def routeToFileName(site: Site, url: Uri): String = {
@@ -92,7 +98,7 @@ object Sites {
 
   def siteToFileName(site: Site): String = allSiteFolder + File.separator + escapeFileName(site)
 
-  private def getSite(url: Uri, params: Map[String, String])(implicit client: Client): Process[Task, String] = {
-    Process.eval(client(url).as[String])
+  private def getSite(url: Uri, origRequest: Request)(implicit client: Client): Process[Task, String] = {
+    Process.eval(client(translateRequest(url, origRequest)).map { c => println(s"Request status: ${c.status}"); c }.as[String])
   }
 }

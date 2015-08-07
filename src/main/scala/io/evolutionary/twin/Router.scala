@@ -40,6 +40,10 @@ class Router(val settings: RouterSettings)(implicit client: Client) extends Part
     case _ => false
   }
 
+  def filterTwinThings(req: Request): Request = {
+    req.copy(params = req.params.filterKeys(!_.startsWith("__twin")))
+  }
+
   override def apply(req: Request): Task[Response] = req match {
     case GET -> Root / (site: Site) =>
       val url = req.params.get("url")

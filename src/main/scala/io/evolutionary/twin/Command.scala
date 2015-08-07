@@ -42,7 +42,10 @@ object Command extends JavaTokenParsers with TwinLogging {
   type Cmd = (Client, Router) => Task[Unit]
 
   // case insensitive literal parser
-  def uncased(s: String): Parser[String] = ("(?i)" + s).r
+  def uncased(s: String*): Parser[String] = s match {
+    case x +: xs if xs.isEmpty => ("(?i)" + x).r
+    case x +: xs => s"(?i)$x".r | uncased(s.tail: _*)
+  }
 
   // sbt input doesn't backspace things, it just adds backspace characters
   def handleBackspaces(cmd: String): String = {
@@ -125,21 +128,21 @@ object Command extends JavaTokenParsers with TwinLogging {
   }
 
   def usageMessage = """Usage: 
-      |("f" | "fetch") siteName url -> 
-      |     fetches url, saving it under site siteName
-      |("c" | "create") siteName ->
-      |     creates a new site with name siteName
-      |("quit" | "exit" | "q") ->
-      |     quits Twin
-      |"delete" siteName ->
-      |     deletes the site named siteName
-      | "deleteAll" ->
-      |     deletes all sites
-      |"list" | "ls" | "l" ->
-      |     lists the sites you have, as well as the urls under them (the site directory structure)
-      |"help" | "usage" | "?" ->
-      |      shows this message
-      """.stripMargin 
+                       |("f" | "fetch") siteName url ->
+                       |     fetches url, saving it under site siteName
+                       |("c" | "create") siteName ->
+                       |     creates a new site with name siteName
+                       |("quit" | "exit" | "q") ->
+                       |     quits Twin
+                       |"delete" siteName ->
+                       |     deletes the site named siteName
+                       | "deleteAll" ->
+                       |     deletes all sites
+                       |"list" | "ls" | "l" ->
+                       |     lists the sites you have, as well as the urls under them (the site directory structure)
+                       |"help" | "usage" | "?" ->
+                       |      shows this message
+                     """.stripMargin
 
   def usageCommand(client: Client, router: Router): Task[Unit] = {
     Task.delay(println(usageMessage))
@@ -147,18 +150,22 @@ object Command extends JavaTokenParsers with TwinLogging {
 
   def commandExceptionHandler: PartialFunction[Throwable, Task[Unit]] = {
     case ex: Exception =>
-      Task.delay { logger.error(ex)("an uncaught error has occurred: ") } 
+      Task.delay {
+        logger.error(ex)("an uncaught exception has occurred: ")
+      }
     case t: Throwable =>
-      Task.delay { logger.error(t)("A serious error has occurred. The program will exit"); sys.exit(1) }
+      Task.delay {
+        logger.error(t)("a serious error has occurred; the program will exit"); sys.exit(1)
+      }
   }
 
   def deleteAll: Parser[Cmd] = uncased("deleteall") ^^ (_ => deleteAllCommand)
   def delete: Parser[Cmd] = uncased("delete") ~> siteRegex ^^ deleteCommand
   def fetch: Parser[Cmd] = (uncased("fetch") ~> siteRegex) ~ url ^^ fetchCommand
-  def create: Parser[Cmd] = (uncased("create") | uncased("c")) ~> siteRegex ^^ createCommand
-  def exit: Parser[Cmd] = (uncased("quit") | uncased("exit") | uncased("q")) ^^ (_ => exitCommand)
-  def list: Parser[Cmd] = (uncased("list") | uncased("ls") | uncased("l")) ^^ (_ => listCommand)
-  def usage: Parser[Cmd] = (uncased("help") | uncased("usage") | uncased("\\?")) ^^ (_ => usageCommand)
+  def create: Parser[Cmd] = uncased("create", "c") ~> siteRegex ^^ createCommand
+  def exit: Parser[Cmd] = uncased("quit", "exit", "q") ^^ (_ => exitCommand)
+  def list: Parser[Cmd] = uncased("list", "ls", "l") ^^ (_ => listCommand)
+  def usage: Parser[Cmd] = uncased("help", "usage", "\\?") ^^ (_ => usageCommand)
 
   def wsp: Parser[Cmd] = "\\s".r.* ^^ (_ => ignore)
   def command: Parser[Cmd] = deleteAll | delete | fetch | exit | list | usage | create | wsp
@@ -167,7 +174,7 @@ object Command extends JavaTokenParsers with TwinLogging {
     val correctCmd = handleBackspaces(cmd)
     val parseResult = parseAll(command, correctCmd)
     Task.delay {
-      logger.debug(s"command entered: $correctCmd\nparse result: $parseResult")
+      logger.debug(s"command entered: $correctCmd")
       println()
     } >>
       Task.fromParseResult(parseResult.map(_(client, router))).handleWith(commandExceptionHandler)

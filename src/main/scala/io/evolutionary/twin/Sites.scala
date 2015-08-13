@@ -3,6 +3,8 @@ package io.evolutionary.twin
 import java.io.{FileOutputStream, File}
 import java.nio.file.{FileAlreadyExistsException, Paths, Files}
 
+import org.http4s.Uri.{RegName, Authority}
+
 import scalaz.stream.text._
 import org.http4s.client.Client
 import org.http4s.dsl._
@@ -23,15 +25,11 @@ object Sites {
   val validFilenameCharacters = ('0' to '9') ++ ('A' to 'Z')
   val fileBufferSize = 4096
 
-
   def fetchRoute(site: Site, url: Uri, req: Request)(implicit client: Client): Process[Task, String] = {
     val fileName = routeToFileName(site, url)
-    val cachedAlready = isCached(fileName)
-    if (cachedAlready) {
-      retrieveFile(fileName)
-    } else {
-      fetchAndSaveToFile(site, fileName, url, req)
-    }
+    val urlWithAuthority = url.copy(authority = Some(url.authority.getOrElse(Authority(host = RegName(url.path)))))
+    val cachedAlready = Process.eval(isCached(fileName))
+    cachedAlready.ifM(retrieveFile(fileName), fetchAndSaveToFile(site, fileName, urlWithAuthority, req))
   }
 
   def forceFetchRoute(site: Site, url: Uri, req: Request)(implicit client: Client): Process[Task, String] = {
@@ -48,7 +46,7 @@ object Sites {
   implicit val fileCodec = Codec.UTF8
 
   def retrieveFile(fileName: String): Process[Task, String] = {
-    Process.constant(100)
+    Process.constant(fileBufferSize)
       .toSource
       .through(io fileChunkR(fileName, fileBufferSize))
       .pipe(utf8Decode)
@@ -78,14 +76,13 @@ object Sites {
     res
   }
 
-  def isCached(fileName: String): Boolean = {
+  def isCached(fileName: String): Task[Boolean] = Task.delay {
     Files.exists(Paths.get(fileName))
   }
 
   def translateRequest(url: Uri, req: Request): Request = {
     val sanitizedParams = req.params.filterKeys(!_.startsWith("__twin"))
-    val method = req.method
-    Request(method, url, req.httpVersion, req.headers, req.body, req.attributes)
+    Request(req.method, url, req.httpVersion, req.headers, req.body, req.attributes)
   }
 
   def escapeFileName(name: String): String = name.toUpperCase.filter(validFilenameCharacters.contains)

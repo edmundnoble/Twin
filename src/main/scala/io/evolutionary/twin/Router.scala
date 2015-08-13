@@ -36,7 +36,7 @@ class Router(val settings: RouterSettings)(implicit client: Client) extends Part
 
   override def isDefinedAt(req: Request): Boolean = req match {
     case _ -> Root / (site: Site) =>
-      settings.mirroredSites.contains(site)
+      true//settings.mirroredSites.contains(site)
     case _ => false
   }
 

@@ -17,47 +17,9 @@ import scala.collection.JavaConverters._
 
 object Command extends JavaTokenParsers with TwinLogging {
 
-  case class ParseException(reason: String) extends RuntimeException(reason)
-
-  implicit class TaskFromParseResult(val p: Task.type) {
-    def fromParseResult(p: ParseResult[Task[Unit]]): Task[Unit] = p match {
-      case Success(s, _) => s
-      case Failure(msg, next) => Task.delay {
-        logger.error("Command failed to parse!")
-      }
-      case Error(msg, next) => Task.fail(ParseException(msg))
-    }
-  }
-
-  implicit class ProcessFromParseResult(val p: Process.type) {
-    def fromParseResult(p: ParseResult[Process[Task, Nothing]]): Process[Task, Nothing] = p match {
-      case Success(s, _) => s
-      case Failure(msg, next) => Process.fromEffect[Task, Nothing](logger.error("Command failed to parse!"))
-      case Error(msg, next) => Process.eval(Task.fail(ParseException(msg)))
-    }
-  }
-  def url = "^(https?|ftp|file)://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]*[-a-zA-Z0-9+&@#/%=~_|]".r
-  def siteRegex = "[a-zA-Z0-9]+".r
+  case class CommandException(reason: String) extends RuntimeException(reason)
 
   type Cmd = (Client, Router) => Task[Unit]
-
-  // case insensitive literal parser
-  def uncased(s: String*): Parser[String] = s match {
-    case x +: xs if xs.isEmpty => ("(?i)" + x).r
-    case x +: xs => s"(?i)$x".r | uncased(s.tail: _*)
-  }
-
-  // sbt input doesn't backspace things, it just adds backspace characters
-  def handleBackspaces(cmd: String): String = {
-    val cmdList = cmd.toList
-    def handleBackspacesRec(f: List[Char]): List[Char] = f match {
-      case Nil => Nil
-      case x :: '\u0008' :: xs => handleBackspacesRec(xs)
-      case '\u0008' :: xs => handleBackspacesRec(xs)
-      case x :: xs => x :: handleBackspacesRec(xs)
-    }
-    handleBackspacesRec(cmdList).mkString
-  }
 
   // empty command
   def ignore(client: Client, router: Router): Task[Unit] = Task.delay(())
@@ -85,12 +47,11 @@ object Command extends JavaTokenParsers with TwinLogging {
     errorsHandled
   }
 
-  def fetchCommand(args: ~[String, String])(client: Client, router: Router): Task[Unit] = args match {
-    case site ~ url =>
+  def fetchCommand(site: String, url: String)(client: Client, router: Router): Task[Unit] = {
       implicit val C = client
       val uriParseResult = Uri.fromString(url)
       uriParseResult.fold(
-        l = _ => Task.fail(new ParseException("Invalid URI")),
+        l = _ => Task.fail(new CommandException("Invalid URI")),
         r = uriParsed => Sites.forceFetchRoute(site, uriParsed, Request()).run)
   }
 
@@ -146,38 +107,6 @@ object Command extends JavaTokenParsers with TwinLogging {
 
   def usageCommand(client: Client, router: Router): Task[Unit] = {
     Task.delay(println(usageMessage))
-  }
-
-  def commandExceptionHandler: PartialFunction[Throwable, Task[Unit]] = {
-    case ex: Exception =>
-      Task.delay {
-        logger.error(ex)("an uncaught exception has occurred: ")
-      }
-    case t: Throwable =>
-      Task.delay {
-        logger.error(t)("a serious error has occurred; the program will exit"); sys.exit(1)
-      }
-  }
-
-  def deleteAll: Parser[Cmd] = uncased("deleteall") ^^ (_ => deleteAllCommand)
-  def delete: Parser[Cmd] = uncased("delete") ~> siteRegex ^^ deleteCommand
-  def fetch: Parser[Cmd] = (uncased("fetch") ~> siteRegex) ~ url ^^ fetchCommand
-  def create: Parser[Cmd] = uncased("create", "c") ~> siteRegex ^^ createCommand
-  def exit: Parser[Cmd] = uncased("quit", "exit", "q") ^^ (_ => exitCommand)
-  def list: Parser[Cmd] = uncased("list", "ls", "l") ^^ (_ => listCommand)
-  def usage: Parser[Cmd] = uncased("help", "usage", "\\?") ^^ (_ => usageCommand)
-
-  def wsp: Parser[Cmd] = "\\s".r.* ^^ (_ => ignore)
-  def command: Parser[Cmd] = deleteAll | delete | fetch | exit | list | usage | create | wsp
-
-  def parseCommand(cmd: String, router: Router)(implicit client: Client): Task[Unit] = {
-    val correctCmd = handleBackspaces(cmd)
-    val parseResult = parseAll(command, correctCmd)
-    Task.delay {
-      logger.debug(s"command entered: $correctCmd")
-      println()
-    } >>
-      Task.fromParseResult(parseResult.map(_(client, router))).handleWith(commandExceptionHandler)
   }
 
 }

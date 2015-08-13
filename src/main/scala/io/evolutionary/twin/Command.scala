@@ -1,21 +1,17 @@
 package io.evolutionary.twin
 
-import java.io.{IOException, File}
 import java.nio.file.{Paths, Files}
 
 import org.http4s.{Request, Uri}
 import org.http4s.client.Client
 
-import scala.util.parsing.combinator.JavaTokenParsers
 import scalaz.concurrent.Task
-import scalaz.stream._
 import scalaz._
 import Scalaz._
-import scalaz.stream.nio.file
 
 import scala.collection.JavaConverters._
 
-object Command extends JavaTokenParsers with TwinLogging {
+object Command extends TwinLogging {
 
   case class CommandException(reason: String) extends RuntimeException(reason)
 
@@ -27,7 +23,7 @@ object Command extends JavaTokenParsers with TwinLogging {
   def exitCommand(client: Client, router: Router): Task[Unit] = Task.delay(System.exit(0))
 
   def fileExceptionHandler: PartialFunction[Throwable, Task[Unit]] = {
-    case ex: IOException =>
+    case ex: Exception =>
       Task.delay(logger.error(ex)("Could not delete file!"))
   }
 
@@ -40,19 +36,34 @@ object Command extends JavaTokenParsers with TwinLogging {
     else siteDeletes.reduce(_ >> _).handleWith(fileExceptionHandler)
   }
 
-  def deleteCommand(site: String)(client: Client, router: Router): Task[Unit] = {
-    val file = Paths.get(Sites.siteToFileName(site))
-    val siteDelete = Task.delay(logger.warn(s"Deleting file... ${file.toString}")) >> FileUtils.deleteFolder(file)
-    val errorsHandled = siteDelete.handleWith(fileExceptionHandler)
-    errorsHandled
+  def deleteCommand(site: String)(client: Client, router: Router): Task[Unit] = Task.suspend {
+    val path = Paths.get(Sites.siteToFileName(site))
+    if (Files.exists(path)) {
+      logger.warn(s"Deleting site $site")
+      FileUtils.deleteFolder(path).handleWith(fileExceptionHandler)
+    } else {
+      Task.delay {
+        logger.error(s"Site $site does not exist!")
+      }
+    }
+  }
+
+  def createCommand(site: String)(client: Client, router: Router): Task[Unit] = Task.delay {
+    val path = Paths.get(Sites.siteToFileName(site))
+    if (Files.exists(path)) {
+      logger.error(s"Site $site already exists!")
+    } else {
+      Files.createDirectory(path)
+      println(s"Site $site created!")
+    }
   }
 
   def fetchCommand(site: String, url: String)(client: Client, router: Router): Task[Unit] = {
-      implicit val C = client
-      val uriParseResult = Uri.fromString(url)
-      uriParseResult.fold(
-        l = _ => Task.fail(new CommandException("Invalid URI")),
-        r = uriParsed => Sites.forceFetchRoute(site, uriParsed, Request()).run)
+    implicit val C = client
+    val uriParseResult = Uri.fromString(url)
+    uriParseResult.fold(
+      l = _ => Task.fail(new CommandException("Invalid URI")),
+      r = uriParsed => Sites.forceFetchRoute(site, uriParsed, Request()).run)
   }
 
   def listCommand(client: Client, router: Router): Task[Unit] = {
@@ -77,15 +88,6 @@ object Command extends JavaTokenParsers with TwinLogging {
         node("Sites", subtrees.toStream)
     }
     tree.map(t => println(t.drawTree))
-  }
-
-  def createCommand(site: String)(client: Client, router: Router): Task[Unit] = {
-    val sites = router.settings.mirroredSites
-    if (sites contains site) {
-      Task.delay(logger.error(s"Site $site already exists!"))
-    } else {
-      Task.delay(???)
-    }
   }
 
   def usageMessage = """Usage: 

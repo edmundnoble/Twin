@@ -1,19 +1,15 @@
 package io.evolutionary.twin
 
-import com.typesafe.config.{ConfigFactory, Config}
+import com.typesafe.config.Config
 import org.http4s.client.Client
 import org.http4s.{Uri, Response, Request}
 import org.http4s.dsl._
 import scala.language.postfixOps
-import scala.util.Try
-import scalaz.Scalaz._
 import scalaz._
 import effectful._
 
 import scalaz.concurrent.Task
 import scalaz.stream._
-
-import scala.collection.JavaConverters._
 
 import net.ceedubs.ficus.Ficus._
 
@@ -29,14 +25,13 @@ object Router {
 
 class Router(val settings: RouterSettings)(implicit client: Client) extends PartialFunction[Request, Task[Response]] {
 
-  import Scalaz._
   import Sites._
 
   def allSites = settings.mirroredSites
 
   override def isDefinedAt(req: Request): Boolean = req match {
     case _ -> Root / (site: Site) =>
-      true//settings.mirroredSites.contains(site)
+      settings.mirroredSites.contains(site)
     case _ => false
   }
 

@@ -16,7 +16,6 @@ import scalaz.concurrent.Task
 import scalaz.stream._
 import scalaz._
 import Scalaz._
-import effectful._
 
 object Sites {
   type Site = String

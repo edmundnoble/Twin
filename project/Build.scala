@@ -17,10 +17,10 @@ object TwinBuild extends Build {
   )
 
   lazy val libDeps = Seq(
-    "org.http4s" %% "http4s-dsl" % "0.8.2",
-    "org.http4s" %% "http4s-blazeserver" % "0.8.2",
-    "org.http4s" %% "http4s-blazeclient" % "0.8.2",
-    "org.http4s" %% "http4s-core" % "0.8.2",
+    "org.http4s" %% "http4s-dsl" % "0.8.3",
+    "org.http4s" %% "http4s-blazeserver" % "0.8.3",
+    "org.http4s" %% "http4s-blazeclient" % "0.8.3",
+    "org.http4s" %% "http4s-core" % "0.8.3",
     "org.scalaz" %% "scalaz-core" % "7.1.3",
     "org.scalaz" %% "scalaz-concurrent" % "7.1.3",
     "com.typesafe" % "config" % "1.3.0",
@@ -30,16 +30,15 @@ object TwinBuild extends Build {
     "org.slf4j" % "slf4j-log4j12" % "1.7.12"
   )
 
-
   lazy val res = Seq(
     "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases",
     Resolver.sonatypeRepo("snapshots")
   )
 
-  lazy val simple = Project.defaultSettings ++ Seq(
+  lazy val simple = Defaults.coreDefaultSettings ++ Seq(
     scalaVersion := "2.11.6",
     scalacOptions ++= scalaOpts,
-    version := "1.0",
+    version := "0.5",
     fork in run := true,
     connectInput in run := true,
     resolvers ++= res,
@@ -48,8 +47,7 @@ object TwinBuild extends Build {
 
   // Library dependencies
   lazy val myProject = Project("Twin", file("."))
-    .settings(Project.defaultSettings)
-    .dependsOn(Projects.depProject)
     .settings(simple)
+    .dependsOn(Projects.depProject)
 
 }
